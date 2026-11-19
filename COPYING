@@ -1,0 +1,19 @@
+GNU GENERAL PUBLIC LICENSE
+Version 2, June 1991
+
+This directory contains Linux kernel module sources and Device Tree overlays
+for the Sony IMX708 sensor (Raspberry Pi Camera Module 3 / 3 Wide) on the
+NVIDIA Jetson Orin Nano Developer Kit (p3768-0000).
+
+All kernel driver C sources, headers, and Device Tree sources in this package
+are licensed under the GNU General Public License, version 2 only
+(SPDX-License-Identifier: GPL-2.0-only), matching the Linux kernel and NVIDIA
+Jetson Tegra camera framework requirements.
+
+Sensor register sequences and timing parameters are derived from the Linux
+kernel IMX708 driver (Copyright (C) 2022, Raspberry Pi Ltd), NVIDIA Tegra
+camera drivers (Copyright (c) 2020-2024, NVIDIA CORPORATION & AFFILIATES), and
+RidgeRun IMX708 Jetson integration references (Copyright (c) 2023, RidgeRun).
+
+You should have received a copy of the GNU General Public License version 2
+along with this program; if not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>.

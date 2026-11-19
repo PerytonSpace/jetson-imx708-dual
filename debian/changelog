@@ -1,0 +1,8 @@
+jetson-imx708-dual (1.0.0-1) jammy; urgency=medium
+
+  * Initial DKMS and dual-CSI Device Tree overlay release for Sony IMX708
+    (Raspberry Pi Camera Module 3 Wide) on NVIDIA Jetson Orin Nano DevKit
+    (p3768-0000) supporting JetPack 6.x (L4T R36.x), JetPack 7.x (L4T R38.x),
+    and JetPack 5.1.x (L4T R35.x).
+
+ -- PerytonSpace ARCh Software <perception@perytonspace.invalid>  Thu, 19 Nov 2026 22:45:00 +0000

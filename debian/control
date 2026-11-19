@@ -1,0 +1,21 @@
+Source: jetson-imx708-dual
+Section: kernel
+Priority: optional
+Maintainer: PerytonSpace <perception@perytonspace.invalid>
+Homepage: https://github.com/PerytonSpace/jetson-imx708-dual
+Build-Depends: debhelper-compat (= 13), dkms
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+
+Package: jetson-imx708-dual-dkms
+Architecture: arm64
+Depends: dkms, build-essential, device-tree-compiler, v4l-utils, i2c-tools, python3, ${misc:Depends}
+Recommends: nvidia-l4t-kernel-headers, nvidia-l4t-kernel-oot-headers
+Description: Dual-CSI Sony IMX708 (Pi Camera Module 3 Wide) DKMS driver for Jetson Orin Nano
+ Out-of-tree Linux kernel V4L2/Tegracam driver (nv_imx708) and dual-CSI Device
+ Tree overlays for running two Raspberry Pi Camera Module 3 Wide (Sony IMX708)
+ sensors on the NVIDIA Jetson Orin Nano Developer Kit (p3768-0000).
+ .
+ Supports 4608x2592@14fps, 2304x1296@56fps (2x2 binned full wide FOV), and
+ 1536x864@120fps across JetPack 6.x (L4T R36.x), JetPack 7.x (L4T R38.x), and
+ JetPack 5.1.x (L4T R35.x). Rebuilds automatically via DKMS on kernel upgrades.

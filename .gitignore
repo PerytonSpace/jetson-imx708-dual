@@ -1,0 +1,21 @@
+# Kernel & Device Tree build artifacts
+*.o
+*.ko
+*.mod
+*.mod.c
+*.mod.o
+*.cmd
+*.order
+*.symvers
+*.dtbo
+*.dtb
+.tmp_versions/
+
+# Packaging outputs
+dist/
+debian/.debhelper/
+debian/files
+debian/debhelper-build-stamp
+debian/*.debhelper.log
+debian/*.substvars
+debian/jetson-imx708-dual-dkms/

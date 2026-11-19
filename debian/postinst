@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PKG_NAME="jetson-imx708-dual"
+PKG_VER="1.0.0"
+SRC_DIR="/usr/src/${PKG_NAME}-${PKG_VER}"
+DTBO_DEST="/boot/tegra234-p3767-camera-p3768-imx708-dual.dtbo"
+
+case "${1:-}" in
+  configure)
+    KVER=$(uname -r)
+    L4T_MAJOR="36"
+    if [[ -r /etc/nv_tegra_release ]]; then
+      DETECTED=$(sed -n 's/^[^R]*R\([0-9][0-9]*\).*/\1/p' /etc/nv_tegra_release | head -n 1)
+      [[ -n "$DETECTED" ]] && L4T_MAJOR="$DETECTED"
+    fi
+
+    if [[ ! -d "/lib/modules/${KVER}/build" ]]; then
+      echo "ERROR: Linux kernel headers not found at /lib/modules/${KVER}/build." >&2
+      echo "Install them and re-run configuration:" >&2
+      echo "  sudo apt update && sudo apt install -y nvidia-l4t-kernel-headers" >&2
+      echo "  sudo dpkg --configure -a" >&2
+      exit 1
+    fi
+
+    if [[ "$L4T_MAJOR" -ge 36 ]]; then
+      if [[ ! -d /usr/src/nvidia/nvidia-oot/include || ! -f /usr/src/nvidia/nvidia-oot/Module.symvers ]]; then
+        echo "ERROR: NVIDIA OOT headers/Module.symvers not found at /usr/src/nvidia/nvidia-oot." >&2
+        echo "Install them and re-run configuration:" >&2
+        echo "  sudo apt update && sudo apt install -y nvidia-l4t-kernel-oot-headers" >&2
+        echo "  sudo dpkg --configure -a" >&2
+        exit 1
+      fi
+    fi
+
+    echo "Registering and building ${PKG_NAME}/${PKG_VER} via DKMS for ${KVER}..."
+    if ! dkms status -m "${PKG_NAME}" -v "${PKG_VER}" 2>/dev/null | grep -q "${PKG_NAME}"; then
+      dkms add -m "${PKG_NAME}" -v "${PKG_VER}"
+    fi
+    dkms build -m "${PKG_NAME}" -v "${PKG_VER}" -k "${KVER}"
+    dkms install -m "${PKG_NAME}" -v "${PKG_VER}" -k "${KVER}" --force
+
+    if [[ "$L4T_MAJOR" -eq 35 ]]; then
+      DTS_VARIANT="r35"
+    else
+      DTS_VARIANT="r36"
+    fi
+
+    DTS_SRC="${SRC_DIR}/dts/tegra234-p3767-camera-p3768-imx708-dual-${DTS_VARIANT}.dts"
+    echo "Compiling dual-CSI Device Tree overlay (${DTS_VARIANT}) -> ${DTBO_DEST}..."
+    dtc -@ -I dts -O dtb -Wno-unit_address_vs_reg -o "${DTBO_DEST}" "${DTS_SRC}"
+    chmod 0644 "${DTBO_DEST}"
+
+    if [[ "${IMX708_SKIP_BOOT_CONFIG:-0}" == "1" ]]; then
+      echo "IMX708_SKIP_BOOT_CONFIG=1 set; skipping DTB pre-merge and extlinux.conf update."
+      echo "Run 'sudo imx708-dual-apply' on the Jetson when ready."
+    elif [[ -f /boot/extlinux/extlinux.conf && -x /usr/sbin/imx708-dual-apply ]]; then
+      if ! /usr/sbin/imx708-dual-apply "${DTBO_DEST}"; then
+        echo "" >&2
+        echo "WARNING: Automatic base DTB detection did not complete." >&2
+        echo "The kernel module and overlay are installed. Complete boot activation with:" >&2
+        echo "  sudo imx708-dual-apply ${DTBO_DEST} /boot/dtb/<your-stock-base>.dtb" >&2
+      fi
+    else
+      echo "Note: /boot/extlinux/extlinux.conf not found; run 'sudo imx708-dual-apply' on the target Jetson."
+    fi
+
+    echo ""
+    echo "jetson-imx708-dual-dkms ${PKG_VER} installed. Reboot ('sudo reboot'), then run:"
+    echo "  sudo imx708-dual-verify --capture 2304 1296"
+    ;;
+esac
+
+exit 0

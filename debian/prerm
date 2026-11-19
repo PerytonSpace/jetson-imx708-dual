@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PKG_NAME="jetson-imx708-dual"
+PKG_VER="1.0.0"
+EXTLINUX="/boot/extlinux/extlinux.conf"
+LABEL_NAME="imx708-dual"
+
+case "${1:-}" in
+  remove|upgrade|deconfigure)
+    if command -v dkms >/dev/null 2>&1; then
+      if dkms status -m "${PKG_NAME}" -v "${PKG_VER}" 2>/dev/null | grep -q "${PKG_NAME}"; then
+        echo "Removing ${PKG_NAME}/${PKG_VER} from DKMS..."
+        dkms remove -m "${PKG_NAME}" -v "${PKG_VER}" --all || true
+      fi
+    fi
+    ;;
+esac
+
+case "${1:-}" in
+  remove|deconfigure)
+    if [[ -f "${EXTLINUX}" ]] && command -v python3 >/dev/null 2>&1; then
+      python3 - "${EXTLINUX}" "${LABEL_NAME}" <<'PY'
+import os, re, sys
+
+extlinux_path, label_name = sys.argv[1], sys.argv[2]
+lines = open(extlinux_path, "r", encoding="utf-8").read().splitlines()
+
+header = []
+blocks = []
+current = None
+for line in lines:
+    if re.match(r"^\s*LABEL\s+", line, re.IGNORECASE):
+        if current is not None:
+            blocks.append(current)
+        name = line.strip().split()[1]
+        current = (name, [line])
+    elif current is None:
+        header.append(line)
+    else:
+        current[1].append(line)
+if current is not None:
+    blocks.append(current)
+
+kept_blocks = [(n, b) for (n, b) in blocks if n != label_name]
+fallback = "primary" if any(n == "primary" for n, _ in kept_blocks) else (kept_blocks[0][0] if kept_blocks else "primary")
+
+new_header = []
+for line in header:
+    if re.match(r"^\s*DEFAULT\s+", line, re.IGNORECASE):
+        cur_def = line.strip().split()[1] if len(line.strip().split()) > 1 else ""
+        if cur_def == label_name:
+            new_header.append(f"DEFAULT {fallback}")
+        else:
+            new_header.append(line)
+    else:
+        new_header.append(line)
+
+out_lines = list(new_header)
+for _, blines in kept_blocks:
+    if out_lines and out_lines[-1].strip() != "":
+        out_lines.append("")
+    out_lines.extend(blines)
+
+tmp_path = extlinux_path + ".tmp"
+with open(tmp_path, "w", encoding="utf-8") as fh:
+    fh.write("\n".join(out_lines) + "\n")
+os.replace(tmp_path, extlinux_path)
+PY
+      echo "Reverted ${EXTLINUX} back to DEFAULT primary."
+    fi
+
+    rm -f /boot/tegra234-p3767-camera-p3768-imx708-dual.dtbo
+    rm -f /boot/dtb/*-imx708-dual.dtb /boot/*-imx708-dual.dtb
+    ;;
+esac
+
+exit 0

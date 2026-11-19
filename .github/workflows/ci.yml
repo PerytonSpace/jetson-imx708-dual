@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-test:
+    name: Lint, C ABI/Unit Tests & DT Overlay Verification
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install toolchain and verification dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            clang \
+            gcc-aarch64-linux-gnu \
+            device-tree-compiler \
+            shellcheck \
+            dpkg-dev \
+            python3
+
+      - name: ShellCheck lint
+        run: |
+          shellcheck -S warning \
+            scripts/*.sh \
+            debian/postinst \
+            debian/prerm \
+            packaging/build_tarball.sh \
+            tests/run_tests.sh
+
+      - name: Run full host test suite (C ABI/unit + dtc/fdtoverlay + extlinux + deb)
+        run: make test
+
+      - name: Build all DT overlays and inspect packaged .deb
+        run: |
+          make dtbo-all
+          cp tegra234-p3767-camera-p3768-imx708-dual-r36.dtbo dist/
+          cp tegra234-p3767-camera-p3768-imx708-dual-r35.dtbo dist/
+          VERSION=$(tr -d '[:space:]' < VERSION)
+          DEB="dist/jetson-imx708-dual-dkms_${VERSION}_arm64.deb"
+          dpkg-deb --info "$DEB"
+          dpkg-deb --contents "$DEB"
+          (cd dist && sha256sum -c SHA256SUMS)
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: jetson-imx708-dual-dist
+          path: |
+            dist/jetson-imx708-dual-dkms_*_arm64.deb
+            dist/jetson-imx708-dual-*.tar.gz
+            dist/tegra234-p3767-camera-p3768-imx708-dual-*.dtbo
+            dist/SHA256SUMS
+          retention-days: 14

@@ -1,0 +1,30 @@
+#!/usr/bin/make -f
+
+PKG_NAME := jetson-imx708-dual
+PKG_VER  := $(shell tr -d '[:space:]' < VERSION)
+STAGE    := debian/jetson-imx708-dual-dkms
+SRC_DST  := $(STAGE)/usr/src/$(PKG_NAME)-$(PKG_VER)
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	@true
+
+override_dh_auto_install:
+	install -d "$(SRC_DST)/include" "$(SRC_DST)/src" "$(SRC_DST)/dts"
+	install -m 0644 VERSION COPYING Makefile dkms.conf "$(SRC_DST)/"
+	install -m 0644 include/imx708.h "$(SRC_DST)/include/"
+	install -m 0644 src/Makefile src/imx708_mode_tbls.h src/nv_imx708.c "$(SRC_DST)/src/"
+	install -m 0644 dts/tegra234-p3767-camera-p3768-imx708-dual-r36.dts "$(SRC_DST)/dts/"
+	install -m 0644 dts/tegra234-p3767-camera-p3768-imx708-dual-r35.dts "$(SRC_DST)/dts/"
+	install -d "$(STAGE)/usr/sbin" "$(STAGE)/usr/bin" "$(STAGE)/etc/modules-load.d"
+	install -m 0755 scripts/apply_overlay.sh "$(STAGE)/usr/sbin/imx708-dual-apply"
+	install -m 0755 scripts/verify.sh "$(STAGE)/usr/bin/imx708-dual-verify"
+	printf 'nv_imx708\n' > "$(STAGE)/etc/modules-load.d/nv_imx708.conf"
+	chmod 0644 "$(STAGE)/etc/modules-load.d/nv_imx708.conf"
+	install -d "$(STAGE)/usr/share/doc/jetson-imx708-dual-dkms"
+	install -m 0644 README.md "$(STAGE)/usr/share/doc/jetson-imx708-dual-dkms/README.md"
+
+override_dh_auto_clean:
+	@true

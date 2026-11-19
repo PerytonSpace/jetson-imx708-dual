@@ -1,0 +1,148 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (must match v<VERSION>, e.g. v1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Verify, Package, and Publish GitHub Release
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve and validate release tag against VERSION
+        id: meta
+        run: |
+          VERSION=$(tr -d '[:space:]' < VERSION)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          EXPECTED_TAG="v${VERSION}"
+          if [ "$TAG" != "$EXPECTED_TAG" ]; then
+            echo "Error: release tag '$TAG' does not match VERSION '$VERSION' (expected '$EXPECTED_TAG')." >&2
+            exit 1
+          fi
+          SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "source_date_epoch=${SOURCE_DATE_EPOCH}" >> "$GITHUB_OUTPUT"
+
+      - name: Install toolchain and packaging dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            clang \
+            gcc-aarch64-linux-gnu \
+            device-tree-compiler \
+            shellcheck \
+            dpkg-dev \
+            python3
+
+      - name: Run lint and full verification suite
+        run: |
+          shellcheck -S warning \
+            scripts/*.sh \
+            debian/postinst \
+            debian/prerm \
+            packaging/build_tarball.sh \
+            tests/run_tests.sh
+          make test
+
+      - name: Build reproducible release artifacts
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.meta.outputs.source_date_epoch }}
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          make clean
+          make dtbo-all
+          make deb tarball
+          cp tegra234-p3767-camera-p3768-imx708-dual-r36.dtbo dist/
+          cp tegra234-p3767-camera-p3768-imx708-dual-r35.dtbo dist/
+          (
+            cd dist
+            sha256sum \
+              "jetson-imx708-dual-dkms_${VERSION}_arm64.deb" \
+              "jetson-imx708-dual-${VERSION}.tar.gz" \
+              tegra234-p3767-camera-p3768-imx708-dual-r36.dtbo \
+              tegra234-p3767-camera-p3768-imx708-dual-r35.dtbo \
+              > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+          python3 tests/test_deb.py "dist/jetson-imx708-dual-dkms_${VERSION}_arm64.deb"
+
+      - name: Generate release notes
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          TAG="${{ steps.meta.outputs.tag }}"
+          REPO="${{ github.repository }}"
+          cat > dist/RELEASE_NOTES.md <<EOF
+          ## Sony IMX708 Dual-CSI Driver for NVIDIA Jetson Orin Nano (${TAG})
+
+          Out-of-tree DKMS kernel driver (\`nv_imx708\`) and dual-CSI Device Tree overlays for running two **Raspberry Pi Camera Module 3 Wide** (Sony IMX708) sensors on the official **NVIDIA Jetson Orin Nano Developer Kit (\`p3768-0000\`)**.
+
+          Supports **JetPack 6.x (L4T R36.x)**, **JetPack 7.x (L4T R38.x)**, and **JetPack 5.1.x (L4T R35.x)** with 3 modes: \`4608x2592@14fps\`, \`2304x1296@56fps\` (2x2 binned full 120° wide FOV), and \`1536x864@120fps\`.
+
+          ### Quick Install on Jetson Orin Nano (Recommended — DKMS \`.deb\`)
+
+          \`\`\`bash
+          curl -LO "https://github.com/${REPO}/releases/download/${TAG}/jetson-imx708-dual-dkms_${VERSION}_arm64.deb"
+          sudo apt update
+          sudo apt install -y "./jetson-imx708-dual-dkms_${VERSION}_arm64.deb"
+          sudo reboot
+          \`\`\`
+
+          Verify both CSI ports after reboot:
+          \`\`\`bash
+          sudo imx708-dual-verify --capture 2304 1296
+          \`\`\`
+
+          Rollback / uninstall cleanly:
+          \`\`\`bash
+          sudo apt remove -y jetson-imx708-dual-dkms && sudo reboot
+          \`\`\`
+
+          ### Release Assets & SHA-256 Checksums
+
+          \`\`\`text
+          $(cat dist/SHA256SUMS)
+          \`\`\`
+          EOF
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          TAG="${{ steps.meta.outputs.tag }}"
+          ASSETS=(
+            "dist/jetson-imx708-dual-dkms_${VERSION}_arm64.deb"
+            "dist/jetson-imx708-dual-${VERSION}.tar.gz"
+            "dist/tegra234-p3767-camera-p3768-imx708-dual-r36.dtbo"
+            "dist/tegra234-p3767-camera-p3768-imx708-dual-r35.dtbo"
+            "dist/SHA256SUMS"
+          )
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
+            gh release edit "$TAG" --notes-file dist/RELEASE_NOTES.md
+          else
+            gh release create "$TAG" "${ASSETS[@]}" \
+              --title "jetson-imx708-dual ${TAG}" \
+              --notes-file dist/RELEASE_NOTES.md
+          fi

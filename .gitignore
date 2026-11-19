@@ -19,3 +19,7 @@ debian/debhelper-build-stamp
 debian/*.debhelper.log
 debian/*.substvars
 debian/jetson-imx708-dual-dkms/
+
+# Python caches
+__pycache__/
+*.py[cod]
